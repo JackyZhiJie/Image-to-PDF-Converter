@@ -62,6 +62,14 @@ npm run build
 ```
 Vite will output the optimized static build files into the `dist/` directory.
 
+### 🌐 Deploying to GitHub Pages
+
+Deploy the compiled site directly to your GitHub Pages branch:
+```bash
+npm run deploy
+```
+This script will build the project and publish the build assets directly to the `gh-pages` branch of your repository. Ensure you have push access to the repository.
+
 ## 📂 Project Structure
 
 ```text
