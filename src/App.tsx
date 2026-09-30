@@ -30,8 +30,28 @@ const COMPRESSION_PRESETS = [
   { name: 'Original', key: 'original', dimension: 3200, quality: 0.95, desc: 'Maximum resolution, minimal compression.' },
 ];
 
+const sortImagesByFileOrder = (a: ProcessedImage, b: ProcessedImage) => {
+  const leftName = (a.file?.name || a.name || '').trim().toLowerCase();
+  const rightName = (b.file?.name || b.name || '').trim().toLowerCase();
+
+  const nameComparison = leftName.localeCompare(rightName, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+
+  if (nameComparison !== 0) return nameComparison;
+  return (a.file?.lastModified ?? 0) - (b.file?.lastModified ?? 0);
+};
+
+const appendImagesInOrder = (existing: ProcessedImage[], incoming: ProcessedImage[]) => {
+  return [...existing, ...incoming].sort(sortImagesByFileOrder);
+};
+
 export default function App() {
   const [images, setImages] = useState<ProcessedImage[]>([]);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [editingImage, setEditingImage] = useState<ProcessedImage | null>(null);
   const [activePreset, setActivePreset] = useState<string>('medium');
   const [settings, setSettings] = useState<PDFGenerationSettings>({
@@ -98,10 +118,24 @@ export default function App() {
     }
   };
 
+  const reorderImages = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= images.length) return;
+
+    clearCompiledPDF();
+    const updated = [...images];
+    const [item] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, item);
+    setImages(updated);
+  };
+
   // Convert File object to local image details
   const processFiles = (files: FileList) => {
     clearCompiledPDF();
     const list = Array.from(files);
+    if (list.length === 0) return;
+
+    const queuedImages: ProcessedImage[] = [];
+    let processedCount = 0;
 
     list.forEach((file) => {
       const previewUrl = URL.createObjectURL(file);
@@ -119,7 +153,13 @@ export default function App() {
           annotations: [],
           drawings: [],
         };
-        setImages((prev) => [...prev, newImg]);
+
+        queuedImages.push(newImg);
+        processedCount += 1;
+
+        if (processedCount === list.length) {
+          setImages((prev) => appendImagesInOrder(prev, queuedImages));
+        }
       };
     });
   };
@@ -192,40 +232,58 @@ export default function App() {
         annotations: [],
         drawings: [],
       };
-      setImages((prev) => [...prev, newImg]);
+      setImages((prev) => appendImagesInOrder(prev, [newImg]));
       stopWebcam();
     }, 'image/jpeg', 0.95);
   };
 
   // Reordering: Arrow Buttons
   const handleMoveImage = (fromIndex: number, toIndex: number) => {
-    if (toIndex < 0 || toIndex >= images.length) return;
-    clearCompiledPDF();
-    const updated = [...images];
-    const [item] = updated.splice(fromIndex, 1);
-    updated.splice(toIndex, 0, item);
-    setImages(updated);
+    reorderImages(fromIndex, toIndex);
   };
 
-  // Reordering: HTML5 Drag & Drop
   const handleDragStart = (e: DragEvent<HTMLDivElement>, index: number) => {
     e.dataTransfer.setData('text/plain', index.toString());
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedIndex(index);
+    setDraggedImageId(images[index]?.id ?? null);
+    setDragOverIndex(index);
   };
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (e: DragEvent<HTMLDivElement>, index: number) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDraggedImageId(null);
+    setDragOverIndex(null);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>, toIndex: number) => {
     const fromIndexStr = e.dataTransfer.getData('text/plain');
     const fromIndex = parseInt(fromIndexStr);
-    if (isNaN(fromIndex) || fromIndex === toIndex) return;
+    if (isNaN(fromIndex)) return;
+    reorderImages(fromIndex, toIndex);
+    setDraggedIndex(null);
+    setDraggedImageId(null);
+    setDragOverIndex(null);
+  };
 
-    clearCompiledPDF();
-    const updated = [...images];
-    const [item] = updated.splice(fromIndex, 1);
-    updated.splice(toIndex, 0, item);
-    setImages(updated);
+  const handlePointerDown = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handlePointerEnter = (index: number) => {
+    if (draggedIndex === null || draggedIndex === index) return;
+    reorderImages(draggedIndex, index);
+    setDraggedIndex(index);
+  };
+
+  const handlePointerUp = () => {
+    setDraggedIndex(null);
   };
 
   // Edit action
@@ -445,8 +503,14 @@ export default function App() {
                     onDelete={() => handleDeleteImage(index)}
                     onMove={handleMoveImage}
                     onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
+                    onDragOver={(e) => handleDragOver(e, index)}
                     onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
+                    onPointerDown={handlePointerDown}
+                    onPointerEnter={handlePointerEnter}
+                    onPointerUp={handlePointerUp}
+                    isDragging={draggedImageId === img.id}
+                    isDropTarget={dragOverIndex === index}
                   />
                 ))}
               </div>

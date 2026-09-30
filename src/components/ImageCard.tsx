@@ -6,24 +6,36 @@ interface ImageCardProps {
   image: ProcessedImage;
   index: number;
   totalImages: number;
+  isDragging?: boolean;
+  isDropTarget?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onMove: (fromIndex: number, toIndex: number) => void;
   onDragStart: (e: DragEvent<HTMLDivElement>, index: number) => void;
   onDragOver: (e: DragEvent<HTMLDivElement>) => void;
   onDrop: (e: DragEvent<HTMLDivElement>, index: number) => void;
+  onDragEnd?: () => void;
+  onPointerDown?: (index: number) => void;
+  onPointerEnter?: (index: number) => void;
+  onPointerUp?: () => void;
 }
 
 export default function ImageCard({
   image,
   index,
   totalImages,
+  isDragging = false,
+  isDropTarget = false,
   onEdit,
   onDelete,
   onMove,
   onDragStart,
   onDragOver,
   onDrop,
+  onDragEnd,
+  onPointerDown,
+  onPointerEnter,
+  onPointerUp,
 }: ImageCardProps) {
   const hasCrop = image.crop && (image.crop.x !== 0 || image.crop.y !== 0 || image.crop.width !== 100 || image.crop.height !== 100);
   const annotationCount = image.annotations.length;
@@ -35,7 +47,18 @@ export default function ImageCard({
       onDragStart={(e) => onDragStart(e, index)}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, index)}
-      className="group relative flex flex-col glass-panel rounded-2xl overflow-hidden shadow-sm hover:shadow-md border border-slate-200/60 dark:border-brand-900/40 hover:-translate-y-0.5 transition-all duration-300 select-none project-card"
+      onDragEnd={onDragEnd}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        onPointerDown?.(index);
+      }}
+      onPointerEnter={() => onPointerEnter?.(index)}
+      onPointerUp={onPointerUp}
+      className={[
+        'group relative flex flex-col glass-panel rounded-2xl overflow-hidden shadow-sm hover:shadow-md border border-slate-200/60 dark:border-brand-900/40 hover:-translate-y-0.5 transition-all duration-300 select-none project-card touch-pan-y',
+        isDragging ? 'opacity-60 scale-[0.98] rotate-1 shadow-2xl shadow-brand-500/20 border-brand-400/80 cursor-grabbing' : '',
+        isDropTarget ? 'ring-2 ring-brand-400/80 ring-offset-2 ring-offset-white dark:ring-offset-brand-950 -translate-y-1 shadow-lg shadow-brand-500/20' : '',
+      ].join(' ')}
     >
       {/* Grid Thumbnail Wrapper */}
       <div className="relative aspect-square w-full bg-slate-100 dark:bg-brand-950 flex items-center justify-center overflow-hidden border-b border-slate-100 dark:border-brand-900/30">
